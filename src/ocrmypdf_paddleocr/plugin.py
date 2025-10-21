@@ -136,9 +136,26 @@ class PaddleOCREngine(OcrEngine):
     @staticmethod
     def _get_paddle_ocr(options):
         """Create and configure PaddleOCR instance."""
+        # OCRmyPDF's Tesseract plugin sets OMP_THREAD_LIMIT to limit Tesseract threading.
+        # This affects all plugins in the process. PaddleOCR needs more threads to work properly.
+        # Temporarily unset it before initializing PaddleOCR.
+        import os
+        saved_omp_limit = os.environ.get('OMP_THREAD_LIMIT')
+        if saved_omp_limit:
+            log.warning(f"Removing OMP_THREAD_LIMIT={saved_omp_limit} set by Tesseract plugin")
+            del os.environ['OMP_THREAD_LIMIT']
+
+        paddle_lang = PaddleOCREngine._get_paddle_lang(options)
+        log.debug(f"Initializing PaddleOCR with language: {paddle_lang}")
+
         kwargs = {
-            'use_textline_orientation': getattr(options, 'paddle_use_angle_cls', True),
-            'lang': PaddleOCREngine._get_paddle_lang(options),
+            # Disable textline orientation - not needed for most documents
+            'use_textline_orientation': False,
+            'lang': paddle_lang,
+            # Disable document unwarping - coordinates must match original image
+            'use_doc_unwarping': False,
+            # Disable orientation classification - OCRmyPDF handles page rotation
+            'use_doc_orientation_classify': False,
         }
 
         # Set device for GPU/CPU
@@ -155,6 +172,7 @@ class PaddleOCREngine(OcrEngine):
         if hasattr(options, 'paddle_cls_model_dir') and options.paddle_cls_model_dir:
             kwargs['textline_orientation_model_dir'] = options.paddle_cls_model_dir
 
+        log.debug(f"Creating PaddleOCR with kwargs: {kwargs}")
         return PaddleOCR(**kwargs)
 
     @staticmethod
@@ -173,18 +191,42 @@ class PaddleOCREngine(OcrEngine):
     @staticmethod
     def generate_hocr(input_file: Path, output_hocr: Path, output_text: Path, options):
         """Generate hOCR output for an image."""
-        log.warning(f"generate_hocr called with {input_file}")
         log.debug(f"Running PaddleOCR on {input_file}")
 
         # Initialize PaddleOCR
         paddle_ocr = PaddleOCREngine._get_paddle_ocr(options)
 
-        # Get image dimensions
+        # Get image dimensions and DPI info
         with Image.open(input_file) as img:
             width, height = img.size
+            dpi = img.info.get('dpi', (300, 300))
+            log.debug(f"Input image: {width}x{height}, DPI: {dpi}")
 
         # Run OCR - use predict() instead of deprecated ocr()
         result = paddle_ocr.predict(str(input_file))
+
+        # Calculate scaling factors from preprocessed image
+        scale_x = 1.0
+        scale_y = 1.0
+        if result and len(result) > 0:
+            ocr_result = result[0]
+
+            # Check if there's a preprocessed image in the result
+            if hasattr(ocr_result, 'get'):
+                # Look for doc_preprocessor_res which contains the unwarped image
+                doc_prep_res = ocr_result.get('doc_preprocessor_res')
+                if doc_prep_res:
+                    if hasattr(doc_prep_res, 'get'):
+                        # The preprocessed image is in 'output_img' field
+                        preprocessed_img = doc_prep_res.get('output_img')
+                        if preprocessed_img is not None:
+                            import numpy as np
+                            if isinstance(preprocessed_img, np.ndarray):
+                                prep_height, prep_width = preprocessed_img.shape[:2]
+                                scale_x = width / prep_width
+                                scale_y = height / prep_height
+                                log.debug(f"Preprocessed image: {prep_width}x{prep_height}, "
+                                         f"scaling factors: x={scale_x:.4f}, y={scale_y:.4f}")
 
         # Get language for hOCR
         lang = PaddleOCREngine._get_paddle_lang(options)
@@ -233,15 +275,15 @@ class PaddleOCREngine(OcrEngine):
                 all_text.append(text)
 
                 # poly is a numpy array of shape (N, 2) with polygon points
-                # Convert to bounding box
+                # Convert to bounding box and apply scaling to map back to original image
                 import numpy as np
                 if isinstance(poly, np.ndarray):
-                    xs = poly[:, 0].astype(int)
-                    ys = poly[:, 1].astype(int)
+                    xs = (poly[:, 0] * scale_x).astype(int)
+                    ys = (poly[:, 1] * scale_y).astype(int)
                 else:
                     # Fallback if not numpy array
-                    xs = [int(point[0]) for point in poly]
-                    ys = [int(point[1]) for point in poly]
+                    xs = [int(point[0] * scale_x) for point in poly]
+                    ys = [int(point[1] * scale_y) for point in poly]
 
                 x_min, y_min, x_max, y_max = min(xs), min(ys), max(xs), max(ys)
 
@@ -322,7 +364,7 @@ class PaddleOCREngine(OcrEngine):
         text_content = '\n'.join(all_text)
         output_text.write_text(text_content, encoding='utf-8')
 
-        log.warning(f"PaddleOCR wrote {len(all_text)} lines to {output_text}, total {len(text_content)} chars")
+        log.debug(f"Generated hOCR with {len(all_text)} text regions")
 
     @staticmethod
     def generate_pdf(input_file: Path, output_pdf: Path, output_text: Path, options):
@@ -331,7 +373,7 @@ class PaddleOCREngine(OcrEngine):
         PaddleOCR doesn't have native PDF generation, so we use hOCR as intermediate
         and convert it to PDF using OCRmyPDF's HocrTransform.
         """
-        log.warning(f"generate_pdf called with {input_file}, output: {output_pdf}")
+        log.debug(f"Generating PDF from {input_file}")
 
         # Create a temporary hOCR file
         output_hocr = output_pdf.with_suffix('.hocr')
