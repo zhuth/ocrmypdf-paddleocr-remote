@@ -308,21 +308,28 @@ class PaddleOCREngine(OcrEngine):
                 words = text.split()
                 if words:
                     line_width = x_max - x_min
-                    # Account for spaces between words in character count
-                    total_chars = sum(len(w) for w in words) + len(words) - 1
-                    # Estimate average space width (typically 0.25-0.3 of average char width)
-                    avg_char_width = line_width / total_chars if total_chars > 0 else 0
-                    space_width = int(avg_char_width * 0.3)
+                    # Calculate width available for words (excluding spaces)
+                    total_chars = sum(len(w) for w in words)
+                    num_spaces = len(words) - 1
+                    # Allocate space for inter-word spaces
+                    total_space_width = line_width - total_chars * (line_width / (total_chars + num_spaces))
+                    space_width = int(total_space_width / num_spaces) if num_spaces > 0 else 0
+                    # Width available for actual word characters
+                    word_area_width = line_width - (space_width * num_spaces)
 
                     current_x = x_min
                     for i, word in enumerate(words):
                         # Estimate word width based on character proportion
                         if total_chars > 0:
-                            word_width = int(line_width * len(word) / total_chars)
+                            word_width = int(word_area_width * len(word) / total_chars)
                         else:
                             word_width = line_width // len(words)
 
-                        word_x_max = min(current_x + word_width, x_max)
+                        # For the last word, extend to line end to avoid rounding errors
+                        if i == len(words) - 1:
+                            word_x_max = x_max
+                        else:
+                            word_x_max = current_x + word_width
 
                         # Escape HTML entities in word
                         word_escaped = (word.replace('&', '&amp;')
