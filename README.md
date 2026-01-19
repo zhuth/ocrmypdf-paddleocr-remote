@@ -1,15 +1,18 @@
-# OCRmyPDF-PaddleOCR
+# OCRmyPDF-PaddleOCR-Remote
 
-A PaddleOCR plugin for OCRmyPDF, enabling the use of PaddleOCR as an alternative OCR engine to Tesseract.
+A PaddleOCR plugin for OCRmyPDF, enabling the use of a remote PaddleOCR served by paddlex as an alternative OCR engine to Tesseract.
 
-## Features
+## Prerequisite
 
-- Drop-in replacement for Tesseract OCR in OCRmyPDF
-- Support for multiple languages including Chinese, Japanese, Korean, and many others
-- GPU acceleration support
-- Text orientation detection
-- Configurable text detection and recognition models
-- **Optimized bounding boxes** for accurate text selection in PDF output
+You should run a PaddleOCR-enabled PaddleX service. Consider starting with the following Dockerfile:
+
+```Dockerfile
+FROM ccr-2vdh3abv-pub.cnc.bj.baidubce.com/paddlex/paddlex:paddlex3.3.4-paddlepaddle3.2.0-gpu-cuda11.8-cudnn8.9-trt8.6
+RUN python -m pip install "paddleocr[all]==3.3.2"
+RUN paddlex --install serving
+```
+
+Buid it, and then start with `docker run -d --gpus=all -p<YOUR_DESIRED_PORT>:8080 <BUILD_TAG_FOR_ABOVE_DOCKERFILE>` to utilize GPU and expose it.
 
 ## Installation
 
