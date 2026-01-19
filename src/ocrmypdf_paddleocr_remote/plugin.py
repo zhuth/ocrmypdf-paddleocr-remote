@@ -58,17 +58,18 @@ class PaddleOCRRemote:
             req = {
                 "file": base64.b64encode(buf.getvalue()).decode('ascii'),
                 "fileType": 1,
-                "returnWordBox": False,
-                "visualize": False
+                "returnWordBox": True,
+                "visualize": False,
+                "useDocUnwarping": False
             }
         
             response = requests.post(url, headers=headers, json=req, timeout=30)
             response.raise_for_status()
-            result = response.json().get('result', {}).get('ocrResults', [])
-            if result:
-                result = result[0]['prunedResult']
-                result['scale'] = scale
-                return result
+            result = response.json()
+            pruned = result['result'].get('ocrResults', [{}])[0]
+            
+            if pruned:
+                return pruned
             else:
                 return {}
         except Exception as e:
@@ -169,14 +170,14 @@ class PaddleOCREngine(OcrEngine):
             log.debug(f"Input image: {width}x{height}, DPI: {dpi}")
 
         # Run OCR - use predict() instead of deprecated ocr()
-        ocr_result = paddle_ocr.predict(str(input_file))
-
+        result = paddle_ocr.predict(str(input_file))
+        ocr_result = result['prunedResult']
+        
         # Calculate scaling factors from preprocessed image
         scale_x = 1.0
         scale_y = 1.0
-        if ocr_result:
-            scale_x = scale_y = ocr_result['scale']
-            log.debug(f"scaling factors: x={scale_x:.4f}, y={scale_y:.4f}")
+       
+        log.debug(f"scaling factors: x={scale_x:.4f}, y={scale_y:.4f}")
 
         # Get language for hOCR
         lang = PaddleOCREngine._get_paddle_lang(options)
@@ -208,7 +209,7 @@ class PaddleOCREngine(OcrEngine):
             # OCRResult is a dict-like object with keys: rec_texts, rec_scores, rec_polys
             texts = ocr_result.get('rec_texts', [])
             scores = ocr_result.get('rec_scores', [])
-            polys = ocr_result.get('rec_polys', [])
+            polys = ocr_result.get('rec_boxes', [])
 
             log.debug(f"PaddleOCR found {len(texts)} text regions")
 
@@ -216,37 +217,11 @@ class PaddleOCREngine(OcrEngine):
             carea_id = 1
             par_id = 1
 
-            for line_id, (text, score, poly) in enumerate(zip(texts, scores, polys), 1):
+            for line_id, (text, score, (x_min, y_min, x_max, y_max)) in enumerate(zip(texts, scores, polys), 1):
                 if not text:
                     continue
 
                 all_text.append(text)
-
-                # poly is a numpy array of shape (N, 2) with polygon points
-                # Convert to bounding box and apply scaling to map back to original image
-                import numpy as np
-                if isinstance(poly, np.ndarray):
-                    # Apply scaling to map back to original image
-                    poly_scaled = poly * [scale_x, scale_y]
-
-                    # For horizontal bounds, use min/max
-                    x_min = int(poly_scaled[:, 0].min())
-                    x_max = int(poly_scaled[:, 0].max())
-
-                    # For vertical bounds, use polygon edges for tighter fit
-                    # For 4-point polygons: points 0-1 are top edge, points 2-3 are bottom edge
-                    if len(poly_scaled) == 4:
-                        y_min = int((poly_scaled[0][1] + poly_scaled[1][1]) / 2)
-                        y_max = int((poly_scaled[2][1] + poly_scaled[3][1]) / 2)
-                    else:
-                        # Fallback to min/max for non-standard polygons
-                        y_min = int(poly_scaled[:, 1].min())
-                        y_max = int(poly_scaled[:, 1].max())
-                else:
-                    # Fallback if not numpy array
-                    xs = [int(point[0] * scale_x) for point in poly]
-                    ys = [int(point[1] * scale_y) for point in poly]
-                    x_min, y_min, x_max, y_max = min(xs), min(ys), max(xs), max(ys)
 
                 conf_pct = int(score * 100)
 
