@@ -1,6 +1,6 @@
 # OCRmyPDF-PaddleOCR-Remote
 
-A PaddleOCR plugin for OCRmyPDF, enabling the use of a remote PaddleOCR served by paddlex as an alternative OCR engine to Tesseract.
+A PaddleOCR plugin for OCRmyPDF, enabling the use of a remote PaddleOCR served by Paddlex as an alternative OCR engine to Tesseract.
 
 ## Prerequisite
 
@@ -42,19 +42,6 @@ Use PaddleOCR as the OCR engine with the `--plugin` flag, suppose you are exposi
 ocrmypdf --plugin ocrmypdf_paddleocr_remote --paddle-remote http://localhost:8080 input.pdf output.pdf
 ```
 
-### With Language Selection
-
-```bash
-# English
-ocrmypdf --plugin ocrmypdf_paddleocr_remote --paddle-remote http://localhost:8080 -l eng input.pdf output.pdf
-
-# Chinese Simplified
-ocrmypdf --plugin ocrmypdf_paddleocr_remote --paddle-remote http://localhost:8080 -l chi_sim input.pdf output.pdf
-
-# Multiple languages (uses first language)
-ocrmypdf --plugin ocrmypdf_paddleocr_remote --paddle-remote http://localhost:8080 -l eng+fra input.pdf output.pdf
-```
-
 ### Python API
 
 ```python
@@ -64,7 +51,6 @@ ocrmypdf.ocr(
     'input.pdf',
     'output.pdf',
     plugins=['ocrmypdf_paddleocr'],
-    language='eng',
     paddle_remote='http://localhost:8080'
 )
 ```
@@ -78,18 +64,6 @@ The plugin adds the following PaddleOCR-specific options:
 ## Supported Languages
 
 No `language` option required actually. PaddleOCR can handle that automatically.
-
-## Development
-
-### Building from Source
-
-```bash
-# Install in development mode
-pip install -e .
-
-# Build distribution
-python -m build
-```
 
 ## How It Works
 
@@ -118,16 +92,6 @@ Instead of using simple min/max coordinates, the plugin uses PaddleOCR's 4-point
 **Result**: Line heights are reduced by 2-3 pixels (3-6%), providing tighter text selection without clipping.
 
 These improvements make text selection in the output PDF more precise and visually aligned with the actual text in the document. For technical details, see [CLAUDE.md](CLAUDE.md).
-
-## Troubleshooting
-
-### Poor OCR Quality
-
-Try these options:
-
-1. Increase image quality: `--oversample 300`
-2. Preprocess images: `--clean` or `--deskew`
-3. Disable angle classification if it's causing issues: `--paddle-no-angle-cls`
 
 ## License
 
