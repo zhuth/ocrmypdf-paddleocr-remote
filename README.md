@@ -13,22 +13,6 @@ A PaddleOCR plugin for OCRmyPDF, enabling the use of PaddleOCR as an alternative
 
 ## Installation
 
-### NixOS
-
-```nix
-# In your NixOS configuration
-{ pkgs }:
-
-let
-  ocrmypdf-paddleocr = pkgs.callPackage ./path/to/ocrmypdf-paddleocr/default.nix {};
-in
-{
-  environment.systemPackages = [
-    ocrmypdf-paddleocr
-  ];
-}
-```
-
 ### Using pip
 
 ```bash
@@ -43,37 +27,29 @@ pip install -e .
 
 - Python >= 3.8
 - OCRmyPDF >= 14.0.0
-- PaddlePaddle >= 2.5.0
-- PaddleOCR >= 2.7.0
 - Pillow >= 9.0.0
 
 ## Usage
 
 ### Command Line
 
-Use PaddleOCR as the OCR engine with the `--plugin` flag:
+Use PaddleOCR as the OCR engine with the `--plugin` flag, suppose you are exposing paddlex-paddleocr on `localhost:8080`:
 
 ```bash
-ocrmypdf --plugin ocrmypdf_paddleocr input.pdf output.pdf
+ocrmypdf --plugin ocrmypdf_paddleocr_remote --paddle-remote http://localhost:8080 input.pdf output.pdf
 ```
 
 ### With Language Selection
 
 ```bash
 # English
-ocrmypdf --plugin ocrmypdf_paddleocr -l eng input.pdf output.pdf
+ocrmypdf --plugin ocrmypdf_paddleocr_remote --paddle-remote http://localhost:8080 -l eng input.pdf output.pdf
 
 # Chinese Simplified
-ocrmypdf --plugin ocrmypdf_paddleocr -l chi_sim input.pdf output.pdf
+ocrmypdf --plugin ocrmypdf_paddleocr_remote --paddle-remote http://localhost:8080 -l chi_sim input.pdf output.pdf
 
 # Multiple languages (uses first language)
-ocrmypdf --plugin ocrmypdf_paddleocr -l eng+fra input.pdf output.pdf
-```
-
-### With GPU Acceleration
-
-```bash
-ocrmypdf --plugin ocrmypdf_paddleocr --paddle-use-gpu input.pdf output.pdf
+ocrmypdf --plugin ocrmypdf_paddleocr_remote --paddle-remote http://localhost:8080 -l eng+fra input.pdf output.pdf
 ```
 
 ### Python API
@@ -85,16 +61,8 @@ ocrmypdf.ocr(
     'input.pdf',
     'output.pdf',
     plugins=['ocrmypdf_paddleocr'],
-    language='eng'
-)
-
-# With GPU
-ocrmypdf.ocr(
-    'input.pdf',
-    'output.pdf',
-    plugins=['ocrmypdf_paddleocr'],
-    language='chi_sim',
-    paddle_use_gpu=True
+    language='eng',
+    paddle_remote='http://localhost:8080'
 )
 ```
 
@@ -102,12 +70,7 @@ ocrmypdf.ocr(
 
 The plugin adds the following PaddleOCR-specific options:
 
-- `--paddle-use-gpu`: Use GPU acceleration (requires GPU-enabled PaddlePaddle)
-- `--paddle-no-angle-cls`: Disable text orientation classification
-- `--paddle-show-log`: Show PaddleOCR internal logging
-- `--paddle-det-model-dir DIR`: Path to custom text detection model directory
-- `--paddle-rec-model-dir DIR`: Path to custom text recognition model directory
-- `--paddle-cls-model-dir DIR`: Path to custom text orientation classification model directory
+- `--paddle-remote`: Remote Paddle OCR Endpoint
 
 ## Supported Languages
 
@@ -134,45 +97,7 @@ PaddleOCR supports many languages. The plugin maps common Tesseract language cod
 
 And many more! See PaddleOCR documentation for the complete list.
 
-## Examples
-
-### Basic OCR
-
-```bash
-ocrmypdf --plugin ocrmypdf_paddleocr input.pdf output.pdf
-```
-
-### Force OCR on all pages
-
-```bash
-ocrmypdf --plugin ocrmypdf_paddleocr --force-ocr input.pdf output.pdf
-```
-
-### Skip pages that already have text
-
-```bash
-ocrmypdf --plugin ocrmypdf_paddleocr --skip-text input.pdf output.pdf
-```
-
-### Optimize output file size
-
-```bash
-ocrmypdf --plugin ocrmypdf_paddleocr --optimize 3 input.pdf output.pdf
-```
-
-### Chinese document with GPU
-
-```bash
-ocrmypdf --plugin ocrmypdf_paddleocr -l chi_sim --paddle-use-gpu input.pdf output.pdf
-```
-
 ## Development
-
-### Running Tests
-
-```bash
-pytest tests/
-```
 
 ### Building from Source
 
@@ -221,24 +146,6 @@ These improvements make text selection in the output PDF more precise and visual
 
 ## Troubleshooting
 
-### Import Error: PaddleOCR not found
-
-Make sure PaddlePaddle and PaddleOCR are installed:
-
-```bash
-pip install paddlepaddle paddleocr
-```
-
-For GPU support:
-
-```bash
-# CUDA 11.x
-pip install paddlepaddle-gpu
-
-# CUDA 12.x
-pip install paddlepaddle-gpu==3.0.0b1 -i https://www.paddlepaddle.org.cn/packages/stable/cu123/
-```
-
 ### Poor OCR Quality
 
 Try these options:
@@ -274,6 +181,7 @@ Contributions are welcome! Please:
 ## Credits
 
 - [OCRmyPDF](https://github.com/ocrmypdf/OCRmyPDF) - PDF OCR tool
+- [OCRmyPDF-PaddleOCR](https://github.com/clefru/ocrmypdf-paddleocr) - The original PaddleOCR plugin
 - [PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR) - Multilingual OCR toolkit
 - [PaddlePaddle](https://github.com/PaddlePaddle/Paddle) - Deep learning framework
 

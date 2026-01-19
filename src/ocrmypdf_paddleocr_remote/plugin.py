@@ -3,71 +3,76 @@
 from __future__ import annotations
 
 import logging
+from io import BytesIO
+import base64
 from pathlib import Path
 
-from PIL import Image
-
+import requests
 from ocrmypdf import hookimpl
 from ocrmypdf.pluginspec import OcrEngine, OrientationConfidence
-
-try:
-    from paddleocr import PaddleOCR
-except ImportError:
-    PaddleOCR = None
+from PIL import Image
 
 log = logging.getLogger(__name__)
 
 
 @hookimpl
 def add_options(parser):
-    """Add PaddleOCR-specific options to the argument parser."""
+    """Add PaddleOCR-Remote-specific options to the argument parser."""
     paddle = parser.add_argument_group(
         "PaddleOCR",
         "Options for PaddleOCR engine"
     )
     paddle.add_argument(
-        '--paddle-use-gpu',
-        action='store_true',
-        help='Use GPU acceleration for PaddleOCR (requires GPU-enabled PaddlePaddle)',
-    )
-    paddle.add_argument(
-        '--paddle-no-angle-cls',
-        action='store_false',
-        dest='paddle_use_angle_cls',
-        default=True,
-        help='Disable text orientation classification',
-    )
-    paddle.add_argument(
-        '--paddle-show-log',
-        action='store_true',
-        help='Show PaddleOCR internal logging',
-    )
-    paddle.add_argument(
-        '--paddle-det-model-dir',
-        metavar='DIR',
-        help='Path to text detection model directory',
-    )
-    paddle.add_argument(
-        '--paddle-rec-model-dir',
-        metavar='DIR',
-        help='Path to text recognition model directory',
-    )
-    paddle.add_argument(
-        '--paddle-cls-model-dir',
-        metavar='DIR',
-        help='Path to text orientation classification model directory',
+        '--paddle-remote',
+        metavar='URL', type=str,
+        help='PaddleOCR remote server',
     )
 
 
 @hookimpl
 def check_options(options):
     """Validate PaddleOCR options."""
-    if PaddleOCR is None:
-        from ocrmypdf.exceptions import MissingDependencyError
-        raise MissingDependencyError(
-            "PaddleOCR is not installed. "
-            "Install it with: pip install paddlepaddle paddleocr"
-        )
+    pass
+
+
+class PaddleOCRRemote:
+    
+    def __init__(self, lang: str, base_url: str) -> None:
+        self.lang = lang
+        self.base_url = base_url.rstrip('/') + '/'
+        
+    def predict(self, filepath: str):
+        url = self.base_url + 'ocr'
+        headers = {
+            "Content-Type": "application/json"
+        }
+        
+        try:
+            buf = BytesIO()
+            im = Image.open(filepath).convert('1')
+            scale = float(im.width)
+            im.thumbnail((3000, 3000))
+            scale /= im.width
+            im.save(buf, format='jpeg')
+            
+            req = {
+                "file": base64.b64encode(buf.getvalue()).decode('ascii'),
+                "fileType": 1,
+                "returnWordBox": False,
+                "visualize": False
+            }
+        
+            response = requests.post(url, headers=headers, json=req, timeout=30)
+            response.raise_for_status()
+            result = response.json().get('result', {}).get('ocrResults', [])
+            if result:
+                result = result[0]['prunedResult']
+                result['scale'] = scale
+                return result
+            else:
+                return {}
+        except Exception as e:
+            raise Exception(f'PaddleOCR Remote failure: {e}', e)
 
 
 class PaddleOCREngine(OcrEngine):
@@ -96,11 +101,7 @@ class PaddleOCREngine(OcrEngine):
     @staticmethod
     def version():
         """Return PaddleOCR version."""
-        try:
-            import paddleocr
-            return paddleocr.__version__
-        except (ImportError, AttributeError):
-            return "2.7.0"
+        return "3.3.x"
 
     @staticmethod
     def creator_tag(options):
@@ -136,44 +137,9 @@ class PaddleOCREngine(OcrEngine):
     @staticmethod
     def _get_paddle_ocr(options):
         """Create and configure PaddleOCR instance."""
-        # OCRmyPDF's Tesseract plugin sets OMP_THREAD_LIMIT to limit Tesseract threading.
-        # This affects all plugins in the process. PaddleOCR needs more threads to work properly.
-        # Temporarily unset it before initializing PaddleOCR.
-        import os
-        saved_omp_limit = os.environ.get('OMP_THREAD_LIMIT')
-        if saved_omp_limit:
-            log.warning(f"Removing OMP_THREAD_LIMIT={saved_omp_limit} set by Tesseract plugin")
-            del os.environ['OMP_THREAD_LIMIT']
-
         paddle_lang = PaddleOCREngine._get_paddle_lang(options)
         log.debug(f"Initializing PaddleOCR with language: {paddle_lang}")
-
-        kwargs = {
-            # Disable textline orientation - not needed for most documents
-            'use_textline_orientation': False,
-            'lang': paddle_lang,
-            # Disable document unwarping - coordinates must match original image
-            'use_doc_unwarping': False,
-            # Disable orientation classification - OCRmyPDF handles page rotation
-            'use_doc_orientation_classify': False,
-        }
-
-        # Set device for GPU/CPU
-        if getattr(options, 'paddle_use_gpu', False):
-            kwargs['device'] = 'gpu'
-        else:
-            kwargs['device'] = 'cpu'
-
-        # Add model directories if specified
-        if hasattr(options, 'paddle_det_model_dir') and options.paddle_det_model_dir:
-            kwargs['text_detection_model_dir'] = options.paddle_det_model_dir
-        if hasattr(options, 'paddle_rec_model_dir') and options.paddle_rec_model_dir:
-            kwargs['text_recognition_model_dir'] = options.paddle_rec_model_dir
-        if hasattr(options, 'paddle_cls_model_dir') and options.paddle_cls_model_dir:
-            kwargs['textline_orientation_model_dir'] = options.paddle_cls_model_dir
-
-        log.debug(f"Creating PaddleOCR with kwargs: {kwargs}")
-        return PaddleOCR(**kwargs)
+        return PaddleOCRRemote(lang=paddle_lang, base_url=options.paddle_remote)
 
     @staticmethod
     def get_orientation(input_file: Path, options) -> OrientationConfidence:
@@ -203,30 +169,14 @@ class PaddleOCREngine(OcrEngine):
             log.debug(f"Input image: {width}x{height}, DPI: {dpi}")
 
         # Run OCR - use predict() instead of deprecated ocr()
-        result = paddle_ocr.predict(str(input_file))
+        ocr_result = paddle_ocr.predict(str(input_file))
 
         # Calculate scaling factors from preprocessed image
         scale_x = 1.0
         scale_y = 1.0
-        if result and len(result) > 0:
-            ocr_result = result[0]
-
-            # Check if there's a preprocessed image in the result
-            if hasattr(ocr_result, 'get'):
-                # Look for doc_preprocessor_res which contains the unwarped image
-                doc_prep_res = ocr_result.get('doc_preprocessor_res')
-                if doc_prep_res:
-                    if hasattr(doc_prep_res, 'get'):
-                        # The preprocessed image is in 'output_img' field
-                        preprocessed_img = doc_prep_res.get('output_img')
-                        if preprocessed_img is not None:
-                            import numpy as np
-                            if isinstance(preprocessed_img, np.ndarray):
-                                prep_height, prep_width = preprocessed_img.shape[:2]
-                                scale_x = width / prep_width
-                                scale_y = height / prep_height
-                                log.debug(f"Preprocessed image: {prep_width}x{prep_height}, "
-                                         f"scaling factors: x={scale_x:.4f}, y={scale_y:.4f}")
+        if ocr_result:
+            scale_x = scale_y = ocr_result['scale']
+            log.debug(f"scaling factors: x={scale_x:.4f}, y={scale_y:.4f}")
 
         # Get language for hOCR
         lang = PaddleOCREngine._get_paddle_lang(options)
@@ -253,10 +203,8 @@ class PaddleOCREngine(OcrEngine):
         # Collect all text for output_text
         all_text = []
 
-        # PaddleOCR 3.x returns a list of OCRResult objects
-        if result and len(result) > 0:
-            ocr_result = result[0]  # Get first page result
-
+        if ocr_result:
+            
             # OCRResult is a dict-like object with keys: rec_texts, rec_scores, rec_polys
             texts = ocr_result.get('rec_texts', [])
             scores = ocr_result.get('rec_scores', [])
@@ -403,7 +351,6 @@ class PaddleOCREngine(OcrEngine):
 
         # Convert hOCR to PDF using OCRmyPDF's hocrtransform
         from ocrmypdf.hocrtransform import HocrTransform
-
         # Get DPI from image
         from PIL import Image
         with Image.open(input_file) as img:

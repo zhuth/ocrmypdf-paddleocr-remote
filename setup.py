@@ -4,14 +4,14 @@ with open("README.md", "r", encoding="utf-8") as fh:
     long_description = fh.read()
 
 setup(
-    name="ocrmypdf-paddleocr",
+    name="ocrmypdf-paddleocr-remote",
     use_scm_version=True,
     author="Your Name",
     author_email="your.email@example.com",
     description="PaddleOCR plugin for OCRmyPDF",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/yourusername/ocrmypdf-paddleocr",
+    url="https://github.com/zhuth/ocrmypdf-paddleocr",
     packages=find_packages(where="src"),
     package_dir={"": "src"},
     classifiers=[
@@ -33,13 +33,12 @@ setup(
     setup_requires=["setuptools_scm"],
     install_requires=[
         "ocrmypdf>=14.0.0",
-        "paddlepaddle>=2.5.0",
-        "paddleocr>=2.7.0",
+        "requests>=2.30.0",
         "pillow>=9.0.0",
     ],
     entry_points={
         "ocrmypdf": [
-            "paddleocr = ocrmypdf_paddleocr.plugin:get_plugin",
+            "paddleocr_remote = ocrmypdf_paddleocr_remote.plugin:get_plugin",
         ],
     },
 )

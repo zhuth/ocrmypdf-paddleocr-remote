@@ -3,9 +3,9 @@ requires = ["setuptools>=45", "setuptools_scm[toml]>=6.2", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "ocrmypdf-paddleocr"
+name = "ocrmypdf-paddleocr-remote"
 dynamic = ["version"]
-description = "PaddleOCR plugin for OCRmyPDF"
+description = "PaddleOCR-Remote plugin for OCRmyPDF"
 readme = "README.md"
 requires-python = ">=3.8"
 license = {text = "MPL-2.0"}
@@ -30,18 +30,18 @@ classifiers = [
 ]
 dependencies = [
     "ocrmypdf>=14.0.0",
-    "paddlepaddle>=2.5.0",
-    "paddleocr>=2.7.0",
+    "requests>=2.30.0",
     "pillow>=9.0.0",
+    "numpy>=1.24.4",
 ]
 
 [project.urls]
-Homepage = "https://github.com/yourusername/ocrmypdf-paddleocr"
-Repository = "https://github.com/yourusername/ocrmypdf-paddleocr"
-"Bug Tracker" = "https://github.com/yourusername/ocrmypdf-paddleocr/issues"
+Homepage = "https://github.com/zhuth/ocrmypdf-paddleocr"
+Repository = "https://github.com/zhuth/ocrmypdf-paddleocr"
+"Bug Tracker" = "https://github.com/zhuth/ocrmypdf-paddleocr/issues"
 
 [project.entry-points.ocrmypdf]
-paddleocr = "ocrmypdf_paddleocr.plugin"
+paddleocr = "ocrmypdf_paddleocr_remote.plugin"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
@@ -50,4 +50,4 @@ package-dir = {"" = "src"}
 where = ["src"]
 
 [tool.setuptools_scm]
-write_to = "src/ocrmypdf_paddleocr/_version.py"
+write_to = "src/ocrmypdf_paddleocr_remote/_version.py"
