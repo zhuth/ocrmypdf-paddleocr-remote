@@ -77,28 +77,7 @@ The plugin adds the following PaddleOCR-specific options:
 
 ## Supported Languages
 
-PaddleOCR supports many languages. The plugin maps common Tesseract language codes to PaddleOCR codes:
-
-| Tesseract Code | PaddleOCR Code | Language |
-|---------------|----------------|----------|
-| eng | en | English |
-| chi_sim | ch | Chinese Simplified |
-| chi_tra | chinese_cht | Chinese Traditional |
-| fra | fr | French |
-| deu | german | German |
-| spa | spanish | Spanish |
-| rus | ru | Russian |
-| jpn | japan | Japanese |
-| kor | korean | Korean |
-| ara | ar | Arabic |
-| hin | hi | Hindi |
-| por | pt | Portuguese |
-| ita | it | Italian |
-| tur | tr | Turkish |
-| vie | vi | Vietnamese |
-| tha | th | Thai |
-
-And many more! See PaddleOCR documentation for the complete list.
+No `language` option required actually. PaddleOCR can handle that automatically.
 
 ## Development
 
@@ -114,18 +93,11 @@ python -m build
 
 ## How It Works
 
-The plugin implements the OCRmyPDF `OcrEngine` interface, which requires:
-
-1. **Language support**: Maps OCRmyPDF/Tesseract language codes to PaddleOCR codes
-2. **Text detection**: Uses PaddleOCR to detect text regions in images
-3. **Text recognition**: Recognizes text within detected regions
-4. **hOCR generation**: Converts PaddleOCR output to hOCR format for OCRmyPDF to overlay on PDFs
-
-PaddleOCR processes each page image and returns bounding boxes with recognized text and confidence scores. The plugin converts this to hOCR (HTML-based OCR) format, which OCRmyPDF uses to create a searchable PDF.
+The plugin implements the OCRmyPDF `OcrEngine` interface, by invoking a remote PaddleOCR API to processes each page image and returns bounding boxes with recognized text and confidence scores. The plugin converts this to hOCR (HTML-based OCR) format, which OCRmyPDF uses to create a searchable PDF.
 
 ## Bounding Box Accuracy
 
-This plugin includes optimized bounding box calculation for accurate text selection in the output PDF:
+Thanks to the original `ocrmypdf-paddleocr` plugin, this plugin also includes optimized bounding box calculation for accurate text selection in the output PDF:
 
 ### Improved Word-Level Boxes
 
@@ -156,16 +128,6 @@ Try these options:
 1. Increase image quality: `--oversample 300`
 2. Preprocess images: `--clean` or `--deskew`
 3. Disable angle classification if it's causing issues: `--paddle-no-angle-cls`
-
-### GPU Not Being Used
-
-Verify PaddlePaddle GPU installation:
-
-```python
-import paddle
-print(paddle.device.is_compiled_with_cuda())  # Should return True
-print(paddle.device.get_device())  # Should show GPU
-```
 
 ## License
 
